@@ -34,6 +34,7 @@ class life360(object):
         with open(self._cache_file) as f:
             cache = json.load(f)
         if cache['credentials'] != self._credentials:
+            self._discard_authorization()
             raise ValueError('Credentials have changed')
         self._auth = cache['authorization']
 
