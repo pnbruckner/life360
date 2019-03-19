@@ -1,9 +1,10 @@
-import requests
+import json
 import os
 import stat
 
-from .exceptions import *
+import requests
 
+from .exceptions import *
 
 _BASE_URL = 'https://api.life360.com/v3/'
 _TOKEN_URL = _BASE_URL + 'oauth2/token.json'
@@ -16,58 +17,57 @@ _AUTH_ERRS = (401, 403)
 
 class life360(object):
 
-    def __init__(self, auth_info_callback, timeout=None,
+    def __init__(self, api_token, username, password, timeout=None,
                  authorization_cache_file=None):
-        self._auth_info_callback = auth_info_callback
+        self._credentials = {
+            'api_token': api_token,
+            'username': username,
+            'password': password}
         self._timeout = timeout
-        self._authorization_cache_file = authorization_cache_file
+        self._cache_file = authorization_cache_file
         self._auth = None
         self._session = requests.Session()
         self._session.headers.update(
             {'Accept': 'application/json', 'cache-control': 'no-cache'})
 
     def _load_authorization(self):
-        with open(self._authorization_cache_file) as f:
-            self._auth = f.read()
+        with open(self._cache_file) as f:
+            cache = json.load(f)
+        if cache['credentials'] != self._credentials:
+            raise ValueError('Credentials have changed')
+        self._auth = cache['authorization']
 
     def _save_authorization(self):
-        if self._authorization_cache_file:
+        if self._cache_file:
             flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
             mode = stat.S_IRUSR | stat.S_IWUSR
             umask = 0o777 ^ mode
             umask_orig = os.umask(umask)
+            cache = {'credentials': self._credentials,
+                     'authorization': self._auth}
             try:
                 with open(os.open(
-                        self._authorization_cache_file, flags, mode), 'w') as f:
-                    f.write(self._auth)
+                        self._cache_file, flags, mode), 'w') as f:
+                    json.dump(cache, f)
             finally:
                 os.umask(umask_orig)
 
     def _discard_authorization(self):
         self._auth = None
-        if self._authorization_cache_file:
+        if self._cache_file:
             try:
-                os.remove(self._authorization_cache_file)
+                os.remove(self._cache_file)
             except:
                 pass
 
     def _get_authorization(self):
-        """Use authorization token, username & password to get access token."""
-        try:
-            auth_token, username, password = self._auth_info_callback()
-        except (TypeError, ValueError) as exc:
-            raise AuthInfoCallbackError(
-                'auth_info_callback must be a function '
-                'that returns a tuple of: '
-                'authorization token, username, password') from exc
-
         data = {
             'grant_type': 'password',
-            'username': username,
-            'password': password,
+            'username': self._username,
+            'password': self._password,
         }
         resp = self._session.post(_TOKEN_URL, data=data, timeout=self._timeout,
-            headers={'Authorization': 'Basic ' + auth_token})
+            headers={'Authorization': 'Basic ' + self._api_token})
 
         if not resp.ok:
             # If it didn't work, try to return a useful error message.
