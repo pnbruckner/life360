@@ -63,11 +63,12 @@ class life360(object):
     def _get_authorization(self):
         data = {
             'grant_type': 'password',
-            'username': self._username,
-            'password': self._password,
+            'username': self._credentials['username'],
+            'password': self._credentials['password'],
         }
-        resp = self._session.post(_TOKEN_URL, data=data, timeout=self._timeout,
-            headers={'Authorization': 'Basic ' + self._api_token})
+        resp = self._session.post(
+            _TOKEN_URL, data=data, timeout=self._timeout, headers={
+                'Authorization': 'Basic ' + self._credentials['api_token']})
 
         if not resp.ok:
             # If it didn't work, try to return a useful error message.
