@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import stat
 
@@ -13,6 +14,8 @@ _CIRCLE_URL = _BASE_URL + 'circles/{}'
 _CIRCLE_MEMBERS_URL = _CIRCLE_URL + '/members'
 _CIRCLE_PLACES_URL = _CIRCLE_URL + '/places'
 _AUTH_ERRS = (401, 403)
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class life360(object):
@@ -31,11 +34,20 @@ class life360(object):
             {'Accept': 'application/json', 'cache-control': 'no-cache'})
 
     def _load_authorization(self):
-        with open(self._cache_file) as f:
-            cache = json.load(f)
-        if cache['credentials'] != self._credentials:
+        try:
+            with open(self._cache_file) as f:
+                cache = json.load(f)
+        except FileNotFoundError:
+            _LOGGER.debug('Authorization cache file does not exist')
+            raise
+        except Exception as error:
+            _LOGGER.error('Could not load authorization from cache file: %s', error)
             self._discard_authorization()
-            raise ValueError('Credentials have changed')
+            raise
+        if cache['credentials'] != self._credentials:
+            _LOGGER.warning('Authorization cache file out of date; reauthorizing')
+            self._discard_authorization()
+            raise ValueError
         self._auth = cache['authorization']
 
     def _save_authorization(self):
@@ -50,6 +62,8 @@ class life360(object):
                 with open(os.open(
                         self._cache_file, flags, mode), 'w') as f:
                     json.dump(cache, f)
+            except Exception as error:
+                _LOGGER.warning('Could not save authorization to cache file: %s', error)
             finally:
                 os.umask(umask_orig)
 
