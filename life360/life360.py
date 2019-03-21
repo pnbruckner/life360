@@ -34,21 +34,29 @@ class life360(object):
             {'Accept': 'application/json', 'cache-control': 'no-cache'})
 
     def _load_authorization(self):
-        try:
-            with open(self._cache_file) as f:
-                cache = json.load(f)
-        except FileNotFoundError:
-            _LOGGER.debug('Authorization cache file does not exist')
-            raise
-        except Exception as error:
-            _LOGGER.error('Could not load authorization from cache file: %s', error)
-            self._discard_authorization()
-            raise
-        if cache['credentials'] != self._credentials:
-            _LOGGER.warning('Authorization cache file out of date; reauthorizing')
-            self._discard_authorization()
-            raise ValueError
-        self._auth = cache['authorization']
+        if self._cache_file:
+            try:
+                with open(self._cache_file) as f:
+                    cache = json.load(f)
+            except FileNotFoundError:
+                _LOGGER.debug('Authorization cache file does not exist')
+                return
+            except json.JSONDecodeError:
+                credentials = authorization = None
+            except Exception as error:
+                _LOGGER.error(
+                    'Could not load authorization from cache file: %s', error)
+                self._discard_authorization()
+                return
+            else:
+                credentials = cache.get('credentials')
+                authorization = cache.get('authorization')
+            if credentials != self._credentials or authorization is None:
+                _LOGGER.warning(
+                    'Authorization cache file out of date. Reauthorizing')
+                self._discard_authorization()
+            else:
+                self._auth = authorization
 
     def _save_authorization(self):
         if self._cache_file:
@@ -109,9 +117,8 @@ class life360(object):
     @property
     def _authorization(self):
         if not self._auth:
-            try:
-                self._load_authorization()
-            except:
+            self._load_authorization()
+            if not self._auth:
                 self._get_authorization()
         return self._auth
 
@@ -121,10 +128,13 @@ class life360(object):
         # If authorization error try regenerating authorization
         # and sending again.
         if resp.status_code in (401, 403):
+            _LOGGER.warning('Error %i %s. Reauthorizing',
+                            resp.status_code, resp.reason)
             self._discard_authorization()
             resp.request.headers['Authorization'] = self._authorization
             resp = self._session.send(resp.request)
             if resp.status_code in (401, 403):
+                _LOGGER.error('Error %i %s', resp.status_code, resp.reason)
                 self._discard_authorization()
 
         resp.raise_for_status()
