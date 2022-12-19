@@ -34,6 +34,7 @@ CLIENT_TOKEN = (
     "h1YzptM2ZydXBSZXRSZXN3ZXJFQ2hBUHJFOTZxYWtFZHI0Vg=="
 )
 HTTP_FORBIDDEN = 403
+HTTP_BAD_GATEWAY = 502
 
 
 def _redact(s, redactions):
@@ -42,6 +43,15 @@ def _redact(s, redactions):
     for pat, repl in redactions:
         result = pat.sub(repl, result)
     return result
+
+
+def _retry(exc):
+    """Determine if request should be retried."""
+    if isinstance(exc, _RETRY_EXCEPTIONS):
+        return True
+    return (
+        isinstance(exc, aiohttp.ClientResponseError) and exc.status == HTTP_BAD_GATEWAY
+    )
 
 
 class Life360:
@@ -168,10 +178,7 @@ class Life360:
                     attempt,
                     _redact(repr(exc), _EXC_REPR_REDACTIONS),
                 )
-                if (
-                    not isinstance(exc, _RETRY_EXCEPTIONS)
-                    or attempt == self._max_attempts
-                ):
+                if not _retry(exc) or attempt == self._max_attempts:
                     # Try to return a useful error message.
                     if not (err_msg := resp_json.get("errorMessage", "").lower()):
                         err_msg = exc.__class__.__name__
