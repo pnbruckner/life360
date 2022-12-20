@@ -35,6 +35,9 @@ CLIENT_TOKEN = (
 )
 HTTP_FORBIDDEN = 403
 HTTP_BAD_GATEWAY = 502
+HTTP_GATEWAY_TIME_OUT = 504
+
+RETRY_CLIENT_RESPONSE_ERRORS =(HTTP_BAD_GATEWAY, HTTP_GATEWAY_TIME_OUT)
 
 
 def _redact(s, redactions):
@@ -50,7 +53,8 @@ def _retry(exc):
     if isinstance(exc, _RETRY_EXCEPTIONS):
         return True
     return (
-        isinstance(exc, aiohttp.ClientResponseError) and exc.status == HTTP_BAD_GATEWAY
+        isinstance(exc, aiohttp.ClientResponseError)
+        and exc.status in RETRY_CLIENT_RESPONSE_ERRORS
     )
 
 
