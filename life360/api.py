@@ -150,10 +150,12 @@ class Life360(AbstractAsyncContextManager):
         self, circle_id: str, member_id: str
     ) -> dict[str, Any]:
         """Request location update for Member."""
-        return await self._post(
-            _MEMBER_UPDATE_URL_FMT.format(circle_id=circle_id, member_id=member_id),
-            {"type": "location"},
-        )
+        return [
+            await self._post(
+                _MEMBER_UPDATE_URL_FMT.format(circle_id=circle_id, member_id=member_id),
+                {"type": "location"},
+            )
+        ]
 
     async def close(self) -> None:
         """Close."""
