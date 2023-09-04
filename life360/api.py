@@ -148,7 +148,7 @@ class Life360(AbstractAsyncContextManager):
 
     async def update_location(
         self, circle_id: str, member_id: str
-    ) -> list[dict[str, Any]]:
+    ) -> dict[str, Any]:
         """Request location update for Member."""
         return await self._post(
             _MEMBER_UPDATE_URL_FMT.format(circle_id=circle_id, member_id=member_id),
