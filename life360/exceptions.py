@@ -8,3 +8,12 @@ class CommError(Life360Error):
 
 class LoginError(Life360Error):
     """Invalid login username or password"""
+
+class UnverifiedPhoneNumberError(LoginError):
+    """Phone number not verified for login"""
+
+class RequireOneTimePasscodeError(LoginError):
+    """User requires OTP via SMS to login"""
+
+class OneTimePasscodeError(LoginError):
+    """Error occured while verifying OTP code."""

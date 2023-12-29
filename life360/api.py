@@ -2,8 +2,10 @@ import asyncio
 from contextlib import AbstractAsyncContextManager, suppress
 import logging
 import re
+import uuid
 from types import TracebackType
 from typing import Any, Optional, Union, cast
+from datetime import datetime
 
 import aiohttp
 
@@ -14,7 +16,10 @@ _HOST = "api-cloudfront.life360.com"
 _BASE_URL = f"{_PROTOCOL}{_HOST}"
 _BASE_CMD_V3 = f"{_BASE_URL}/v3/"
 _BASE_CMD_V4 = f"{_BASE_URL}/v4/"
+_BASE_CMD_V5 = f"{_BASE_URL}/v5/"
 _TOKEN_URL = f"{_BASE_CMD_V3}oauth2/token"
+_SIGNIN_OTP_URL = f"{_BASE_CMD_V5}users/signin/otp/send"
+_SIGNIN_OTP_VERIFY_URL = f"{_BASE_CMD_V5}users/signin/otp/verify"
 _CIRCLES_URL = f"{_BASE_CMD_V4}circles"
 _CIRCLE_URL_FMT = f"{_BASE_CMD_V3}circles/{{circle_id}}"
 _CIRCLE_MEMBERS_URL_FMT = f"{_CIRCLE_URL_FMT}/members"
@@ -95,6 +100,10 @@ class Life360(AbstractAsyncContextManager):
             self._timeout = timeout
         self._max_attempts = max_retries + 1 if max_retries else 1
         self._authorization = authorization
+        # following values all serve different purposes
+        self._sms_otp_id = uuid.uuid4() # ce-id header
+        self._device_identifier = uuid.uuid4() # ce-source and x-device-id header
+        self._sms_otp_transaction_id = None # OTP flow transaction ID.
 
     async def __aexit__(
         self,
@@ -105,6 +114,58 @@ class Life360(AbstractAsyncContextManager):
         """Exit context manager."""
         await self.close()
         return await super().__aexit__(exc_type, exc_value, traceback)
+
+    async def send_sms_otp(self, country_code: str, national_number: str):
+        """Send an SMS OTP token for authentication."""
+        resp_json = await self._request(
+            method="post",
+            url=_SIGNIN_OTP_URL,
+            authorization=f"Basic {CLIENT_TOKEN}",
+            json={
+                "countryCode": country_code,
+                "nationalNumber": national_number
+            },
+            headers={
+                "ce-type": "com.life360.device.signin-otp.v1",
+                "ce-specversion": "1.0",
+                "ce-id": self._sms_otp_id,
+                "ce-time": datetime.now(),
+                "ce-source": f"/ANDROID/13/Google-Pixel-4-XL/{self._device_identifier}",
+                "content-type": "application/json; charset=UTF-8",
+                "x-device-id": self._device_identifier
+            }
+        )
+        if resp_json["code"] == "unverified-phone":
+            raise UnverifiedPhoneNumberError(resp_json["message"])
+
+    async def verify_sms_otp(self, verification_code: str):
+        """Verify and login to Life360 via SMS OTP"""
+        resp_json = await self._request(
+            method="post",
+            url=_SIGNIN_OTP_VERIFY_URL,
+            authorization=f"Basic {CLIENT_TOKEN}",
+            json={
+                "transactionId": self._sms_otp_transaction_id,
+                "code": verification_code
+            },
+            headers={
+                "ce-type": "com.life360.device.signin-token-otp.v1",
+                "ce-specversion": "1.0",
+                "ce-id": self._sms_otp_id,
+                "ce-time": datetime.now(),
+                "ce-source": f"/ANDROID/13/Google-Pixel-4-XL/{self._device_identifier}",
+                "content-type": "application/json; charset=UTF-8",
+                "x-device-id": self._device_identifier
+            }
+        )
+        if resp_json.get("access_token", None) is not None:
+            self._authorization = (
+                f"{resp_json['token_type']} {resp_json['access_token']}"
+            )
+            return self._authorization
+
+        if resp_json.get("error", None) is not None:
+            raise OneTimePasscodeError(resp_json["error"]["message"])
 
     async def get_authorization(self, username: str, password: str) -> str:
         """Get authorization string from username & password."""
@@ -183,7 +244,9 @@ class Life360(AbstractAsyncContextManager):
         url: str,
         authorization: Optional[str] = None,
         data: Optional[dict[str, Any]] = None,
+        json: Optional[dict] = None,
         msg: Optional[str] = None,
+        headers: Optional[dict] = None 
     ) -> Any:
         """Make a request to server."""
         if not self._session:
@@ -204,6 +267,11 @@ class Life360(AbstractAsyncContextManager):
         }
         if data is not None:
             kwargs["data"] = data
+        if json is not None:
+            kwargs["json"] = json
+        if headers is not None:
+            for header in headers:
+                kwargs["headers"][header] = headers[header]
         if self._timeout is not None:
             kwargs["timeout"] = self._timeout
 
