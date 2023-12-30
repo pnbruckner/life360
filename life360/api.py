@@ -19,7 +19,8 @@ _BASE_CMD_V4 = f"{_BASE_URL}/v4/"
 _BASE_CMD_V5 = f"{_BASE_URL}/v5/"
 _TOKEN_URL = f"{_BASE_CMD_V3}oauth2/token"
 _SIGNIN_OTP_URL = f"{_BASE_CMD_V5}users/signin/otp/send"
-_SIGNIN_OTP_VERIFY_URL = f"{_BASE_CMD_V5}users/signin/otp/verify"
+_SIGNIN_OTP_TOKEN_URL = f"{_BASE_CMD_V5}users/signin/otp/token"
+_USER_SEARCH_URL = f"{_BASE_CMD_V3}users/lookup?"
 _CIRCLES_URL = f"{_BASE_CMD_V4}circles"
 _CIRCLE_URL_FMT = f"{_BASE_CMD_V3}circles/{{circle_id}}"
 _CIRCLE_MEMBERS_URL_FMT = f"{_CIRCLE_URL_FMT}/members"
@@ -101,8 +102,8 @@ class Life360(AbstractAsyncContextManager):
         self._max_attempts = max_retries + 1 if max_retries else 1
         self._authorization = authorization
         # following values all serve different purposes
-        self._sms_otp_id = uuid.uuid4() # ce-id header
-        self._device_identifier = uuid.uuid4() # ce-source and x-device-id header
+        self._sms_otp_id = str(uuid.uuid4()) # ce-id header
+        self._device_identifier = str(uuid.uuid4()) # ce-source and x-device-id header
         self._sms_otp_transaction_id = None # OTP flow transaction ID.
 
     async def __aexit__(
@@ -115,8 +116,38 @@ class Life360(AbstractAsyncContextManager):
         await self.close()
         return await super().__aexit__(exc_type, exc_value, traceback)
 
+    async def user_lookup(self,
+                          country_code: str = None,
+                          national_number: str = None,
+                          email: str = None) -> dict:
+        """Validate if a user is available to sign in and return the sign in type."""
+        if email is None and (country_code is None and national_number is None):
+            raise ValueError("Missing either email or country code and national number args")
+        if email is None and (country_code is None or national_number is None):
+            raise ValueError("Missing either country code or national number")
+        request_url = _USER_SEARCH_URL
+        if email is not None:
+            request_url = f"{request_url}email={email}"
+        elif (email is None) and not (country_code is None and national_number is None):
+            request_url = f"{request_url}countryCode={country_code}&phone={national_number}"
+        else:
+            raise ValueError("Unable to detect search type using provided args")
+        data = await self._request(
+            method="get",
+            url=request_url,
+            authorization=""
+        )
+        return data
+
     async def send_sms_otp(self, country_code: str, national_number: str):
         """Send an SMS OTP token for authentication."""
+        user_lookup = await self.user_lookup(
+            country_code=country_code,
+            national_number=national_number
+        )
+        if user_lookup["loginMethod"] != "phone":
+            raise RequireEmailPasswordError(
+                "This user requires authentication via username and password to login.")
         resp_json = await self._request(
             method="post",
             url=_SIGNIN_OTP_URL,
@@ -129,20 +160,22 @@ class Life360(AbstractAsyncContextManager):
                 "ce-type": "com.life360.device.signin-otp.v1",
                 "ce-specversion": "1.0",
                 "ce-id": self._sms_otp_id,
-                "ce-time": datetime.now(),
+                "ce-time": f"{str(datetime.now().isoformat(timespec='seconds'))}.000Z",
                 "ce-source": f"/ANDROID/13/Google-Pixel-4-XL/{self._device_identifier}",
                 "content-type": "application/json; charset=UTF-8",
                 "x-device-id": self._device_identifier
             }
         )
-        if resp_json["code"] == "unverified-phone":
+        if resp_json.get("code", "") == "unverified-phone":
             raise UnverifiedPhoneNumberError(resp_json["message"])
+        self._sms_otp_transaction_id = resp_json["data"]["transactionId"]
+        return self._sms_otp_transaction_id
 
     async def verify_sms_otp(self, verification_code: str):
         """Verify and login to Life360 via SMS OTP"""
         resp_json = await self._request(
             method="post",
-            url=_SIGNIN_OTP_VERIFY_URL,
+            url=_SIGNIN_OTP_TOKEN_URL,
             authorization=f"Basic {CLIENT_TOKEN}",
             json={
                 "transactionId": self._sms_otp_transaction_id,
@@ -152,7 +185,7 @@ class Life360(AbstractAsyncContextManager):
                 "ce-type": "com.life360.device.signin-token-otp.v1",
                 "ce-specversion": "1.0",
                 "ce-id": self._sms_otp_id,
-                "ce-time": datetime.now(),
+                "ce-time": f"{str(datetime.now().isoformat(timespec='seconds'))}.000Z",
                 "ce-source": f"/ANDROID/13/Google-Pixel-4-XL/{self._device_identifier}",
                 "content-type": "application/json; charset=UTF-8",
                 "x-device-id": self._device_identifier
@@ -169,6 +202,9 @@ class Life360(AbstractAsyncContextManager):
 
     async def get_authorization(self, username: str, password: str) -> str:
         """Get authorization string from username & password."""
+        user_lookup = await self.user_lookup(email=username)
+        if user_lookup.get("loginMethod", "phone") == "phone":
+            raise RequireOneTimePasscodeError("This user requires SMS based OTP to login.")
         resp_json = await self._request(
             method="post",
             url=_TOKEN_URL,
@@ -265,6 +301,8 @@ class Life360(AbstractAsyncContextManager):
                 else self._authorization,
             },
         }
+        if authorization == "":
+            kwargs["headers"].pop("Authorization")
         if data is not None:
             kwargs["data"] = data
         if json is not None:

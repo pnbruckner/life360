@@ -15,5 +15,8 @@ class UnverifiedPhoneNumberError(LoginError):
 class RequireOneTimePasscodeError(LoginError):
     """User requires OTP via SMS to login"""
 
+class RequireEmailPasswordError(LoginError):
+    """User requires standard authentication with username and password"""
+
 class OneTimePasscodeError(LoginError):
     """Error occured while verifying OTP code."""
