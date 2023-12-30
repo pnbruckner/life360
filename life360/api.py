@@ -43,6 +43,7 @@ CLIENT_TOKEN = (
     "JhYzpkOEM5ZVlVdkE2dUZ1YnJ1SmVnZXRyZVZ1dFJlQ1JVWQ=="
 )
 HTTP_FORBIDDEN = 403
+HTTP_TOO_MANY_REQUESTS = 425
 HTTP_BAD_GATEWAY = 502
 HTTP_SERVICE_UNAVAILABLE = 503
 HTTP_GATEWAY_TIME_OUT = 504
@@ -342,6 +343,8 @@ class Life360(AbstractAsyncContextManager):
                             err_msg += f": {exc_args}"
                     if status == HTTP_FORBIDDEN:
                         raise LoginError(err_msg)
+                    if status == HTTP_TOO_MANY_REQUESTS:
+                        raise TooManyRequestsError(err_msg)
                     raise CommError(err_msg)
             else:
                 return resp_json

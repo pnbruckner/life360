@@ -20,3 +20,7 @@ class RequireEmailPasswordError(LoginError):
 
 class OneTimePasscodeError(LoginError):
     """Error occured while verifying OTP code."""
+
+class TooManyRequestsError(Life360Error):
+    """Too many attempts have been sent to the server for this API.
+    Retry again after the value specified in the Retry-After header."""
