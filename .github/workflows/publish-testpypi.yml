@@ -1,10 +1,6 @@
 name: Publish to TestPyPI
 
 on:
-  push:
-    tags:
-      - '*.*.*'
-
   workflow_dispatch:
 
 jobs:
@@ -32,7 +28,7 @@ jobs:
 
   publish-testpypi:
     runs-on: ubuntu-latest
-    name: Publish to Test PyPI
+    name: Publish to TestPyPI
     environment: publish-testpypi
     permissions:
       id-token: write
