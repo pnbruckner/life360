@@ -11,6 +11,8 @@ jobs:
   publish-testpypi:
     runs-on: ubuntu-latest
     environment: publish-testpypi
+    permissions:
+      id-token: write
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v4
