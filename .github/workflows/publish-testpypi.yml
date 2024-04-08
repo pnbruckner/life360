@@ -32,7 +32,7 @@ jobs:
 
   publish-testpypi:
     runs-on: ubuntu-latest
-    name: Upload dist to Test pypi
+    name: Publish to Test PyPI
     environment: publish-testpypi
     permissions:
       id-token: write
@@ -44,16 +44,8 @@ jobs:
         with:
           name: dist-files
           path: dist
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Publish dist files
+        uses: pypa/gh-action-pypi-publish@v1
         with:
-          python-version: 3.12
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip setuptools wheel
-          pip install twine
-      - name: Upload to TestPypi
-        run: |
-          python -m twine upload dist/*
-        env:
-          TWINE_REPOSITORY: testpypi
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
