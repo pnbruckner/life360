@@ -43,6 +43,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: dist-files
+          path: dist
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
