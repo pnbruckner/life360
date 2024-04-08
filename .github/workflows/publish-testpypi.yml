@@ -8,36 +8,53 @@ on:
   workflow_dispatch:
 
 jobs:
+  build-dist:
+    runs-on: ubuntu-latest
+    name: Build dist
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.12
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+      - name: Build dist files
+        run: |
+          python setup.py sdist bdist_wheel
+      - name: Save dist files
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-files
+          path: dist
+
   publish-testpypi:
     runs-on: ubuntu-latest
+    name: Upload dist to Test pypi
     environment: publish-testpypi
     permissions:
       id-token: write
+    needs:
+      - build-dist
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v4
-
-      # Sets up python3
-      - uses: actions/setup-python@v5
+      - name: Get dist files
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-files
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: 3.12
-
-      # Installs and upgrades pip, installs other dependencies and installs the package from setup.py
-      - name: "Installs and upgrades pip, installs other dependencies and installs the package from setup.py"
+          cache: pip
+      - name: Install dependencies
         run: |
-          # Upgrade pip
-          python3 -m pip install --upgrade pip
-          # Install build deps
-          python3 -m pip install setuptools wheel twine
-          # If requirements.txt exists, install from it
-          # if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          # Install the package from setup.py
-          # python3 setup.py install
-
-      # Upload to TestPyPI
-      - name: Build and Upload to TestPyPI
+          python -m pip install --upgrade pip setuptools wheel
+          pip install twine
+      - name: Upload to TestPypi
         run: |
-          python3 setup.py sdist bdist_wheel
-          python3 -m twine upload dist/*
+          python -m twine upload dist/*
         env:
           TWINE_REPOSITORY: testpypi
