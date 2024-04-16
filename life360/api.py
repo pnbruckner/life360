@@ -117,22 +117,35 @@ class Life360:
         if max_retries < 0:
             raise ValueError("max_retries must be non-negative")
         self._max_attempts = max_retries + 1
-        self._verbosity = verbosity
         self._authorization = authorization
+        self.verbosity = verbosity
         self._etags: dict[str, str] = {}
+
+    @property
+    def verbosity(self) -> int:
+        """Return verbosity level."""
+        return self._verbosity
+
+    @verbosity.setter
+    def verbosity(self, value: int) -> None:
+        """Set verbosity level."""
+        if not (0 <= value <= 4):
+            raise ValueError("verbosity must be between 0 and 4, inclusive")
+        self._verbosity = value
 
     @property
     def authorization(self) -> str | None:
         """Return authorization."""
         return self._authorization
 
-    async def login_by_username(self, username: str, password: str) -> None:
+    async def login_by_username(self, username: str, password: str) -> str:
         """Log into Life360 server using username & password."""
         reply = cast(
             Mapping[str, str],
             await self._request(
                 _TOKEN_URL,
-                "post",
+                method="post",
+                raise_not_modified=False,
                 data={
                     "grant_type": "password",
                     "username": username,
@@ -147,31 +160,44 @@ class Life360:
             raise Life360Error(
                 f"Unexpected response while logging in by username: {reply}"
             ) from None
+        return self._authorization
 
-    async def get_circles(self) -> list[dict[str, str]]:
+    async def get_circles(
+        self, *, raise_not_modified: bool = False
+    ) -> list[dict[str, str]]:
         """Get basic data about all Circles."""
         return cast(
             dict[str, list[dict[str, str]]],
-            await self._request(_CIRCLES_URL),
+            await self._request(_CIRCLES_URL, raise_not_modified),
         )["circles"]
 
-    async def get_circle_members(self, cid: str) -> list[dict[str, Any]]:
+    async def get_circle_members(
+        self, cid: str, *, raise_not_modified: bool = False
+    ) -> list[dict[str, Any]]:
         """Get details for Members in given Circle."""
         return cast(
             dict[str, list[dict[str, Any]]],
-            await self._request(_CIRCLE_MEMBERS_URL_FMT.format(cid=cid)),
+            await self._request(
+                _CIRCLE_MEMBERS_URL_FMT.format(cid=cid), raise_not_modified
+            ),
         )["members"]
 
-    async def get_circle_member(self, cid: str, mid: str) -> dict[str, Any]:
+    async def get_circle_member(
+        self, cid: str, mid: str, *, raise_not_modified: bool = False
+    ) -> dict[str, Any]:
         """Get details for Member as seen from given Circle."""
         return cast(
             dict[str, Any],
-            await self._request(_MEMBER_URL_FMT.format(cid=cid, mid=mid)),
+            await self._request(
+                _MEMBER_URL_FMT.format(cid=cid, mid=mid), raise_not_modified
+            ),
         )
 
     async def _request(
         self,
         url: str,
+        /,
+        raise_not_modified: bool,
         method: str = "get",
         *,
         authorization: str | None = None,
@@ -186,7 +212,7 @@ class Life360:
         headers = _HEADERS
         if authorization != "":
             headers["authorization"] = authorization
-        if etag := self._etags.get(url):
+        if raise_not_modified and (etag := self._etags.get(url)):
             headers["if-none-match"] = etag
         kwargs.setdefault("headers", {}).update(headers)
 
@@ -217,7 +243,7 @@ class Life360:
                         Mapping[str, str],
                         await cast(ClientResponse, resp).json(),
                     )["errorMessage"].lower()
-                except (AttributeError, ClientError, JSONDecodeError):
+                except (AttributeError, ClientError, KeyError, JSONDecodeError):
                     err_msg = self._redact(_format_exc(exc), _URL_REDACTIONS)
                 match status:
                     case HTTP_Error.UNAUTHORIZED:
@@ -252,9 +278,13 @@ class Life360:
             try:
                 return await resp.json()
             except (ClientError, JSONDecodeError) as exc:
+                try:
+                    resp_ = await resp.text()
+                except ClientError:
+                    resp_ = str(resp)
                 _LOGGER.debug(
                     "While parsing response: %r: %s",
-                    resp,
+                    resp_,
                     self._redact(repr(exc), _EXC_REPR_REDACTIONS),
                 )
                 raise Life360Error(
@@ -263,7 +293,7 @@ class Life360:
 
     async def _dump_resp_text(self, resp: ClientResponse | None) -> None:
         """Dump response text to log."""
-        if resp is None or self._verbosity < 2:
+        if resp is None or self.verbosity < 2:
             return
         try:
             if not (text := await resp.text()):
@@ -275,14 +305,14 @@ class Life360:
             self._redact(
                 text,
                 _RESP_TEXT_ALL_REDACTIONS
-                if self._verbosity < 3
+                if self.verbosity < 3
                 else _RESP_TEXT_BASIC_REDACTIONS,
             ),
         )
 
     async def _dump_resp(self, resp: ClientResponse) -> None:
         """Dump response to log."""
-        if self._verbosity < 1:
+        if self.verbosity < 1:
             return
         resp_repr = repr(resp).replace("\n", " ")
         _LOGGER.debug("resp: %s", self._redact(resp_repr, _RESP_REPR_REDACTIONS))
@@ -290,7 +320,7 @@ class Life360:
 
     def _redact(self, string: str, redactions: Iterable[re.Pattern]) -> str:
         """Redact string for lower verbosity levels."""
-        if self._verbosity >= 4:
+        if self.verbosity >= 4:
             return string
         for redaction in redactions:
             while m := redaction.search(string):
