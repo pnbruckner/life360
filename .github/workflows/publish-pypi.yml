@@ -46,3 +46,22 @@ jobs:
           path: dist
       - name: Publish dist files
         uses: pypa/gh-action-pypi-publish@release/v1
+
+  upload-release:
+    runs-on: ubuntu-latest
+    name: Upload to release
+    if: ${{ github.event_name == 'push' }}
+    needs:
+      - build-dist
+    steps:
+      - name: Get dist files
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-files
+          path: dist
+      - name: Upload dist files
+        uses: AButler/upload-release-assets@v3.0
+        with:
+          files: dist/*
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          release-tag: ${{ github.ref_name }}
