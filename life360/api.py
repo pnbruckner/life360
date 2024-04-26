@@ -101,7 +101,7 @@ class NameAdapter(logging.LoggerAdapter):
         self, msg: Any, kwargs: MutableMapping[str, Any]
     ) -> tuple[Any, MutableMapping[str, Any]]:
         """Add name prefix."""
-        return f"{cast(Mapping[str, object], self.extra)['name']}: {msg}", kwargs
+        return f"{cast(Mapping[str, str], self.extra)['name']}: {msg}", kwargs
 
 
 class Life360:
@@ -134,12 +134,24 @@ class Life360:
             raise ValueError("max_retries must be non-negative")
         self._max_attempts = max_retries + 1
         self.authorization = authorization
-        if name:
-            self._logger = NameAdapter(_LOGGER, {"name": name})
-        else:
-            self._logger = _LOGGER
+        self.name = name
         self.verbosity = verbosity
         self._etags: dict[str, str] = {}
+
+    @property
+    def name(self) -> str | None:
+        """Return name."""
+        if isinstance(self._logger, NameAdapter):
+            return cast(Mapping[str, str], self._logger.extra)["name"]
+        return None
+
+    @name.setter
+    def name(self, name: str | None) -> None:
+        """Set name."""
+        if name is None:
+            self._logger = _LOGGER
+        else:
+            self._logger = NameAdapter(_LOGGER, {"name": name})
 
     @property
     def verbosity(self) -> int:
@@ -330,7 +342,9 @@ class Life360:
         if self.verbosity < 1:
             return
         resp_repr = repr(resp).replace("\n", " ")
-        self._logger.debug("Response headers: %s", self._redact(resp_repr, _RESP_REPR_REDACTIONS))
+        self._logger.debug(
+            "Response headers: %s", self._redact(resp_repr, _RESP_REPR_REDACTIONS)
+        )
         await self._dump_resp_text(resp)
 
     def _redact(self, string: str, redactions: Iterable[re.Pattern]) -> str:
