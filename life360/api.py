@@ -236,12 +236,12 @@ class Life360:
         if authorization is None:
             raise LoginError("Must login")
 
-        headers = _HEADERS
+        headers: dict[str, str] = {}
         if authorization != "":
             headers["authorization"] = authorization
         if raise_not_modified and (etag := self._etags.get(url)):
             headers["if-none-match"] = etag
-        kwargs.setdefault("headers", {}).update(headers)
+        kwargs["headers"] = _HEADERS | headers | kwargs.pop("headers", {})
 
         for attempt in range(1, self._max_attempts + 1):
             resp: ClientResponse | None = None
