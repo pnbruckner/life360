@@ -36,6 +36,7 @@ _PROTOCOL = "https://"
 _BASE_URL = f"{_PROTOCOL}{HOST}"
 _BASE_CMD_FMT = f"{_BASE_URL}/v{{}}/"
 _TOKEN_URL = f"{_BASE_CMD_FMT.format(3)}oauth2/token"
+_ME_URL = f"{_BASE_CMD_FMT.format(3)}users/me"
 _CIRCLES_URL = f"{_BASE_CMD_FMT.format(4)}circles"
 _CIRCLE_URL_FMT = f"{_BASE_CMD_FMT.format(3)}circles/{{cid}}"
 _CIRCLE_MEMBERS_URL_FMT = f"{_CIRCLE_URL_FMT}/members"
@@ -188,6 +189,10 @@ class Life360:
                 f"Unexpected response while logging in by username: {reply}"
             ) from None
         return self.authorization
+
+    async def get_me(self, *, raise_not_modified: bool = False) -> dict[str, Any]:
+        """Get logged in Member."""
+        return cast(dict[str, Any], await self._request(_ME_URL, raise_not_modified))
 
     async def get_circles(
         self, *, raise_not_modified: bool = False
