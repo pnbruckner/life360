@@ -41,6 +41,7 @@ _CIRCLES_URL = f"{_BASE_CMD_FMT.format(4)}circles"
 _CIRCLE_URL_FMT = f"{_BASE_CMD_FMT.format(3)}circles/{{cid}}"
 _CIRCLE_MEMBERS_URL_FMT = f"{_CIRCLE_URL_FMT}/members"
 _MEMBER_URL_FMT = f"{_CIRCLE_MEMBERS_URL_FMT}/{{mid}}"
+_MEMBER_REQUEST_URL_FMT = f"{_MEMBER_URL_FMT}/request"
 
 _HEADERS = {
     "accept": "application/json",
@@ -224,6 +225,29 @@ class Life360:
                 _MEMBER_URL_FMT.format(cid=cid, mid=mid), raise_not_modified
             ),
         )
+
+    async def send_circle_member_request(
+        self, cid: str, mid: str, request: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Send a request to a Circle's Member."""
+        return cast(
+            dict[str, Any],
+            await self._request(
+                _MEMBER_REQUEST_URL_FMT.format(cid=cid, mid=mid),
+                method="post",
+                raise_not_modified=False,
+                data=request,
+            ),
+        )
+
+    async def request_circle_member_location_update(
+        self, cid: str, mid: str
+    ) -> dict[str, Any]:
+        """Send a request to a Circle's Member to update their location.
+
+        Seems to cause updates every five seconds for a minute (after request is seen.)
+        """
+        return await self.send_circle_member_request(cid, mid, {"type": "location"})
 
     async def _request(
         self,
