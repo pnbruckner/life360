@@ -49,7 +49,8 @@ _HEADERS = {
     "user-agent": USER_AGENT,
 }
 
-_RETRY_EXCEPTIONS = (ClientConnectionError, asyncio.TimeoutError)
+_TIMEOUT_EXCEPTIONS = (asyncio.TimeoutError, TimeoutError)
+_RETRY_EXCEPTIONS = (ClientConnectionError, *_TIMEOUT_EXCEPTIONS)
 _RETRY_CLIENT_RESPONSE_ERRORS = (
     HTTP_Error.BAD_GATEWAY,
     HTTP_Error.SERVICE_UNAVAILABLE,
@@ -282,7 +283,7 @@ class Life360:
                 )
                 status = resp.status
                 resp.raise_for_status()
-            except ClientError as exc:
+            except (ClientError, *_TIMEOUT_EXCEPTIONS) as exc:
                 self._logger.debug(
                     "Request error: %s(%s), attempt %i: %s",
                     method.upper(),
