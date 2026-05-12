@@ -1,5 +1,5 @@
 """Life360 Exceptions."""
-from .const import HTTP_Error
+from http import HTTPStatus
 
 
 class Life360Error(Exception):
@@ -24,7 +24,7 @@ class LoginError(CommError):
 
     def __init__(self, message: str) -> None:
         """Initialize exception."""
-        super().__init__(message, HTTP_Error.FORBIDDEN)
+        super().__init__(message, HTTPStatus.FORBIDDEN)
 
 
 class NotFound(CommError):
@@ -32,7 +32,7 @@ class NotFound(CommError):
 
     def __init__(self, message: str) -> None:
         """Initialize exception."""
-        super().__init__(message, HTTP_Error.NOT_FOUND)
+        super().__init__(message, HTTPStatus.NOT_FOUND)
 
 
 class RateLimited(CommError):
@@ -40,7 +40,7 @@ class RateLimited(CommError):
 
     def __init__(self, message: str, retry_after: float | None) -> None:
         """Initialize exception."""
-        super().__init__(message, HTTP_Error.TOO_MANY_REQUESTS)
+        super().__init__(message, HTTPStatus.TOO_MANY_REQUESTS)
         self.retry_after = retry_after
 
     def __str__(self) -> str:
@@ -53,7 +53,7 @@ class Unauthorized(CommError):
 
     def __init__(self, message: str, authenticate: str | None) -> None:
         """Initialize exception."""
-        super().__init__(message, HTTP_Error.UNAUTHORIZED)
+        super().__init__(message, HTTPStatus.UNAUTHORIZED)
         self.authenticate = authenticate
 
     def __str__(self) -> str:
