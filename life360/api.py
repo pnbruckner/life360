@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Iterable, Mapping, MutableMapping
 from contextlib import suppress
+from http import HTTPStatus
 from json import JSONDecodeError
 import logging
 import re
@@ -19,7 +20,7 @@ from aiohttp import (
 )
 from aiohttp.typedefs import LooseHeaders
 
-from .const import CLIENT_TOKEN, HOST, USER_AGENT, HTTP_Error
+from .const import CLIENT_TOKEN, HOST, USER_AGENT
 from .exceptions import (
     CommError,
     Life360Error,
@@ -52,10 +53,11 @@ _HEADERS = {
 _TIMEOUT_EXCEPTIONS = (asyncio.TimeoutError, TimeoutError)
 _RETRY_EXCEPTIONS = (ClientConnectionError, *_TIMEOUT_EXCEPTIONS)
 _RETRY_CLIENT_RESPONSE_ERRORS = (
-    HTTP_Error.BAD_GATEWAY,
-    HTTP_Error.SERVICE_UNAVAILABLE,
-    HTTP_Error.GATEWAY_TIME_OUT,
-    HTTP_Error.SERVER_UNKNOWN_ERROR,
+    HTTPStatus.INTERNAL_SERVER_ERROR,
+    HTTPStatus.BAD_GATEWAY,
+    HTTPStatus.SERVICE_UNAVAILABLE,
+    HTTPStatus.GATEWAY_TIMEOUT,
+    520,     # Cloudflare catch-all error
 )
 
 _URL_REDACTIONS = (re.compile(r"/(?:(?:circles)|(?:members))/(?!REDACTED)([\w-]+)"),)
@@ -303,18 +305,18 @@ class Life360:
                 except (AttributeError, ClientError, KeyError, JSONDecodeError):
                     err_msg = self._redact(_format_exc(exc), _URL_REDACTIONS)
                 match status:
-                    case HTTP_Error.UNAUTHORIZED:
+                    case HTTPStatus.UNAUTHORIZED:
                         authenticate = None
                         with suppress(KeyError):
                             authenticate = cast(
                                 LooseHeaders, cast(ClientResponseError, exc).headers
                             )["www-authenticate"]
                         raise Unauthorized(err_msg, authenticate) from exc
-                    case HTTP_Error.FORBIDDEN:
+                    case HTTPStatus.FORBIDDEN:
                         raise LoginError(err_msg) from exc
-                    case HTTP_Error.NOT_FOUND:
+                    case HTTPStatus.NOT_FOUND:
                         raise NotFound(err_msg) from exc
-                    case HTTP_Error.TOO_MANY_REQUESTS:
+                    case HTTPStatus.TOO_MANY_REQUESTS:
                         try:
                             retry_after = float(
                                 cast(
@@ -328,7 +330,7 @@ class Life360:
                         raise CommError(err_msg, status) from exc
 
             await self._dump_resp(resp)
-            if status == HTTP_Error.NOT_MODIFIED:
+            if status == HTTPStatus.NOT_MODIFIED:
                 raise NotModified
             if etag := resp.headers.get("l360-etag"):
                 self._etags[url] = etag
