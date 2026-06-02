@@ -58,6 +58,8 @@ _RETRY_CLIENT_RESPONSE_ERRORS = (
     HTTPStatus.SERVICE_UNAVAILABLE,
     HTTPStatus.GATEWAY_TIMEOUT,
     520,     # Cloudflare catch-all error
+    522,     # Cloudflare to Life360 connection timed out
+    525,     # Cloudflare to Life360 SSL handshake failed
 )
 
 _URL_REDACTIONS = (re.compile(r"/(?:(?:circles)|(?:members))/(?!REDACTED)([\w-]+)"),)
